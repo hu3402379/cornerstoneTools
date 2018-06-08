@@ -6,7 +6,9 @@ export default function (sp, boundingBox, dataHandles) {
     count: 0,
     mean: 0.0,
     variance: 0.0,
-    stdDev: 0.0
+    stdDev: 0.0,
+    minCT: 0.0,
+    maxCT: 0.0
   };
 
   const sum = getSum(sp, boundingBox, dataHandles);
@@ -19,6 +21,8 @@ export default function (sp, boundingBox, dataHandles) {
   statisticsObj.mean = sum.value / sum.count;
   statisticsObj.variance = sum.squared / sum.count - statisticsObj.mean * statisticsObj.mean;
   statisticsObj.stdDev = Math.sqrt(statisticsObj.variance);
+  statisticsObj.minCT = Math.min(...sp);
+  statisticsObj.maxCT = Math.max(...sp);
 
   return statisticsObj;
 }

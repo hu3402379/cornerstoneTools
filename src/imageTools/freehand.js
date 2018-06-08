@@ -54,7 +54,30 @@ function createNewMeasurement () {
   return measurementData;
 }
 
-function pointNearTool (eventData, toolIndex) {
+function pointNearTool (element, data, coords) {
+  if (data.visible === false) {
+    return false;
+  }
+
+  for (let i = 0; i < data.handles.length; i++) {
+    const lineSegment = {
+      start: external.cornerstone.pixelToCanvas(element, {
+        x: data.handles[i].x,
+        y: data.handles[i].y
+      }),
+      end: external.cornerstone.pixelToCanvas(element, data.handles[i].lines[0])
+    };
+    const distanceToPoint = external.cornerstoneMath.lineSegment.distanceToPoint(lineSegment, coords);
+
+    if (distanceToPoint < 25) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function pointNearTool2 (eventData, toolIndex) {
   const isPointNearTool = pointNearHandle(eventData, toolIndex);
 
   // JPETTS - if returns index 0, set true (fails first condition as 0 is falsy).
@@ -530,7 +553,7 @@ function mouseHover (eventData, toolData) {
       imageNeedsUpdate = true;
     }
 
-    if ((pointNearTool(eventData, i) && !data.active) || (!pointNearTool(eventData, i) && data.active)) {
+    if ((pointNearTool2(eventData, i) && !data.active) || (!pointNearTool2(eventData, i) && data.active)) {
       data.active = !data.active;
       imageNeedsUpdate = true;
     }
@@ -775,13 +798,16 @@ function onImageRendered (e) {
       let moSuffix = '';
 
       if (modality === 'CT') {
-        moSuffix = ' HU';
+        moSuffix = 'Hu';
       }
 
       // Create a line of text to display the mean and any units that were specified (i.e. HU)
-      let meanText = `Mean: ${numberWithCommas(meanStdDev.mean.toFixed(2))}${moSuffix}`;
+      let meanText = `CT平均值: ${numberWithCommas(meanStdDev.mean.toFixed(2))}${moSuffix}`;
       // Create a line of text to display the standard deviation and any units that were specified (i.e. HU)
       let stdDevText = `StdDev: ${numberWithCommas(meanStdDev.stdDev.toFixed(2))}${moSuffix}`;
+      const minCTText = `CT最小值：${numberWithCommas(meanStdDev.minCT.toFixed(2))}${moSuffix}`;
+      const maxCTText = `CT最大值：${numberWithCommas(meanStdDev.maxCT.toFixed(2))}${moSuffix}`;
+
 
       // If this image has SUV values to display, concatenate them to the text line
       if (meanStdDevSUV && meanStdDevSUV.mean !== undefined) {
@@ -792,8 +818,10 @@ function onImageRendered (e) {
       }
 
       // Add these text lines to the array to be displayed in the textbox
+      textLines.push(maxCTText);
+      textLines.push(minCTText);
       textLines.push(meanText);
-      textLines.push(stdDevText);
+    //   TextLines.push(stdDevText);
     }
 
     // If the area is a sane value, display it
@@ -808,11 +836,13 @@ function onImageRendered (e) {
       }
 
       // Create a line of text to display the area and its units
-      const areaText = `Area: ${numberWithCommas(area.toFixed(2))}${suffix}`;
+      const areaText = `面积: ${numberWithCommas(area.toFixed(2))}${suffix}`;
 
       // Add this text line to the array to be displayed in the textbox
       textLines.push(areaText);
     }
+
+    return textLines;
   }
 
   function textBoxAnchorPoints (handles) {
@@ -895,7 +925,8 @@ const freehand = {
   activate,
   deactivate,
   getConfiguration,
-  setConfiguration
+  setConfiguration,
+  pointNearTool
 };
 
 export { freehand };

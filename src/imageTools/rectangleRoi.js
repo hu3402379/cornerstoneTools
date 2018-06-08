@@ -92,7 +92,9 @@ function calculateMeanStdDev (sp, ellipse) {
       count,
       mean: 0.0,
       variance: 0.0,
-      stdDev: 0.0
+      stdDev: 0.0,
+      minCT: 0.0,
+      maxCT: 0.0
     };
   }
 
@@ -103,7 +105,9 @@ function calculateMeanStdDev (sp, ellipse) {
     count,
     mean,
     variance,
-    stdDev: Math.sqrt(variance)
+    stdDev: Math.sqrt(variance),
+    minCT: Math.min(...sp),
+    maxCT: Math.max(...sp)
   };
 }
 
@@ -209,41 +213,43 @@ function onImageRendered (e) {
       // If the tool has no configuration settings, always draw the handles
       drawHandles(context, eventData, data.handles, color);
     }
+    // If the tool configuration specifies to hide text box, set config.hideTextBox = true, default show text box
+    if (config && !config.hideTextBox) {
 
     // Define variables for the area and mean/standard deviation
-    let area,
-      meanStdDev,
-      meanStdDevSUV;
+      let area,
+        meanStdDev,
+        meanStdDevSUV;
 
-    // Perform a check to see if the tool has been invalidated. This is to prevent
-    // Unnecessary re-calculation of the area, mean, and standard deviation if the
-    // Image is re-rendered but the tool has not moved (e.g. during a zoom)
-    if (data.invalidated === false) {
+      // Perform a check to see if the tool has been invalidated. This is to prevent
+      // Unnecessary re-calculation of the area, mean, and standard deviation if the
+      // Image is re-rendered but the tool has not moved (e.g. during a zoom)
+      if (data.invalidated === false) {
       // If the data is not invalidated, retrieve it from the toolData
-      meanStdDev = data.meanStdDev;
-      meanStdDevSUV = data.meanStdDevSUV;
-      area = data.area;
-    } else {
+        meanStdDev = data.meanStdDev;
+        meanStdDevSUV = data.meanStdDevSUV;
+        area = data.area;
+      } else {
       // If the data has been invalidated, we need to calculate it again
 
       // Retrieve the bounds of the ellipse in image coordinates
-      const ellipse = {
-        left: Math.min(data.handles.start.x, data.handles.end.x),
-        top: Math.min(data.handles.start.y, data.handles.end.y),
-        width: Math.abs(data.handles.start.x - data.handles.end.x),
-        height: Math.abs(data.handles.start.y - data.handles.end.y)
-      };
+        const ellipse = {
+          left: Math.min(data.handles.start.x, data.handles.end.x),
+          top: Math.min(data.handles.start.y, data.handles.end.y),
+          width: Math.abs(data.handles.start.x - data.handles.end.x),
+          height: Math.abs(data.handles.start.y - data.handles.end.y)
+        };
 
-      // First, make sure this is not a color image, since no mean / standard
-      // Deviation will be calculated for color images.
-      if (!image.color) {
+        // First, make sure this is not a color image, since no mean / standard
+        // Deviation will be calculated for color images.
+        if (!image.color) {
         // Retrieve the array of pixels that the ellipse bounds cover
-        const pixels = cornerstone.getPixels(element, ellipse.left, ellipse.top, ellipse.width, ellipse.height);
+          const pixels = cornerstone.getPixels(element, ellipse.left, ellipse.top, ellipse.width, ellipse.height);
 
-        // Calculate the mean & standard deviation from the pixels and the ellipse details
-        meanStdDev = calculateMeanStdDev(pixels, ellipse);
+          // Calculate the mean & standard deviation from the pixels and the ellipse details
+          meanStdDev = calculateMeanStdDev(pixels, ellipse);
 
-        if (modality === 'PT') {
+          if (modality === 'PT') {
           // If the image is from a PET scan, use the DICOM tags to
           // Calculate the SUV from the mean and standard deviation.
 
@@ -251,44 +257,45 @@ function onImageRendered (e) {
           // The calculateSUV routine also rescales to modality pixel values, we are first
           // Returning the values to storedPixel values before calcuating SUV with them.
           // TODO: Clean this up? Should we add an option to not scale in calculateSUV?
-          meanStdDevSUV = {
-            mean: calculateSUV(image, (meanStdDev.mean - image.intercept) / image.slope),
-            stdDev: calculateSUV(image, (meanStdDev.stdDev - image.intercept) / image.slope)
-          };
+            meanStdDevSUV = {
+              mean: calculateSUV(image, (meanStdDev.mean - image.intercept) / image.slope),
+              stdDev: calculateSUV(image, (meanStdDev.stdDev - image.intercept) / image.slope)
+            };
+          }
+
+          // If the mean and standard deviation values are sane, store them for later retrieval
+          if (meanStdDev && !isNaN(meanStdDev.mean)) {
+            data.meanStdDev = meanStdDev;
+            data.meanStdDevSUV = meanStdDevSUV;
+          }
         }
 
-        // If the mean and standard deviation values are sane, store them for later retrieval
-        if (meanStdDev && !isNaN(meanStdDev.mean)) {
-          data.meanStdDev = meanStdDev;
-          data.meanStdDevSUV = meanStdDevSUV;
+        // Calculate the image area from the ellipse dimensions and pixel spacing
+        area = (ellipse.width * (colPixelSpacing || 1)) * (ellipse.height * (rowPixelSpacing || 1));
+
+        // If the area value is sane, store it for later retrieval
+        if (!isNaN(area)) {
+          data.area = area;
         }
+
+        // Set the invalidated flag to false so that this data won't automatically be recalculated
+        data.invalidated = false;
       }
 
-      // Calculate the image area from the ellipse dimensions and pixel spacing
-      area = (ellipse.width * (colPixelSpacing || 1)) * (ellipse.height * (rowPixelSpacing || 1));
+      const text = textBoxText(data);
 
-      // If the area value is sane, store it for later retrieval
-      if (!isNaN(area)) {
-        data.area = area;
-      }
-
-      // Set the invalidated flag to false so that this data won't automatically be recalculated
-      data.invalidated = false;
-    }
-
-    const text = textBoxText(data);
-
-    // If the textbox has not been moved by the user, it should be displayed on the right-most
-    // Side of the tool.
-    if (!data.handles.textBox.hasMoved) {
+      // If the textbox has not been moved by the user, it should be displayed on the right-most
+      // Side of the tool.
+      if (!data.handles.textBox.hasMoved) {
       // Find the rightmost side of the ellipse at its vertical center, and place the textbox here
       // Note that this calculates it in image coordinates
-      data.handles.textBox.x = Math.max(data.handles.start.x, data.handles.end.x);
-      data.handles.textBox.y = (data.handles.start.y + data.handles.end.y) / 2;
-    }
+        data.handles.textBox.x = Math.max(data.handles.start.x, data.handles.end.x);
+        data.handles.textBox.y = (data.handles.start.y + data.handles.end.y) / 2;
+      }
 
-    drawLinkedTextBox(context, element, data.handles.textBox, text,
-      data.handles, textBoxAnchorPoints, color, lineWidth, 0, true);
+      drawLinkedTextBox(context, element, data.handles.textBox, text,
+        data.handles, textBoxAnchorPoints, color, lineWidth, 0, true);
+    }
     context.restore();
   }
 
@@ -303,13 +310,16 @@ function onImageRendered (e) {
       let moSuffix = '';
 
       if (modality === 'CT') {
-        moSuffix = ' HU';
+        moSuffix = 'Hu';
       }
 
       // Create a line of text to display the mean and any units that were specified (i.e. HU)
-      let meanText = `Mean: ${numberWithCommas(meanStdDev.mean.toFixed(2))}${moSuffix}`;
+      let meanText = `CT平均值: ${numberWithCommas(meanStdDev.mean.toFixed(2))}${moSuffix}`;
       // Create a line of text to display the standard deviation and any units that were specified (i.e. HU)
       let stdDevText = `StdDev: ${numberWithCommas(meanStdDev.stdDev.toFixed(2))}${moSuffix}`;
+      const minCTText = `CT最小值：${numberWithCommas(meanStdDev.minCT.toFixed(2))}${moSuffix}`;
+      const maxCTText = `CT最大值：${numberWithCommas(meanStdDev.maxCT.toFixed(2))}${moSuffix}`;
+
 
       // If this image has SUV values to display, concatenate them to the text line
       if (meanStdDevSUV && meanStdDevSUV.mean !== undefined) {
@@ -320,8 +330,10 @@ function onImageRendered (e) {
       }
 
       // Add these text lines to the array to be displayed in the textbox
+      textLines.push(maxCTText);
+      textLines.push(minCTText);
       textLines.push(meanText);
-      textLines.push(stdDevText);
+    //   TextLines.push(stdDevText);
     }
 
     // If the area is a sane value, display it
@@ -336,7 +348,7 @@ function onImageRendered (e) {
       }
 
       // Create a line of text to display the area and its units
-      const areaText = `Area: ${numberWithCommas(area.toFixed(2))}${suffix}`;
+      const areaText = `面积: ${numberWithCommas(area.toFixed(2))}${suffix}`;
 
       // Add this text line to the array to be displayed in the textbox
       textLines.push(areaText);
