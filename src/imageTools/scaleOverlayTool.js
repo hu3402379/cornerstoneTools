@@ -187,8 +187,8 @@ function onImageRendered (e) {
   const horizontalIntervalScale = (10.0 / colPixelSpacing) * viewport.scale;
 
   // 0.1 and 0.05 gives margin to horizontal and vertical lines
-  const hscaleBounds = computeScaleBounds(eventData, canvasSize, imageSize, 0.25, 0.05);
-  const vscaleBounds = computeScaleBounds(eventData, canvasSize, imageSize, 0.05, 0.15);
+  const hscaleBounds = computeScaleBounds(eventData, canvasSize, imageSize, 0.35, 0.05);
+  const vscaleBounds = computeScaleBounds(eventData, canvasSize, imageSize, 0.05, 0.35);
 
   if (!canvasSize.width || !canvasSize.height || !imageSize.width || !imageSize.height || !hscaleBounds || !vscaleBounds) {
     return;
@@ -200,8 +200,8 @@ function onImageRendered (e) {
     vscaleBounds,
     verticalMinorTick: verticalIntervalScale,
     horizontalMinorTick: horizontalIntervalScale,
-    minorTickLength: 12.5,
-    majorTickLength: 25,
+    minorTickLength: 3.5,
+    majorTickLength: 7,
     verticalLine: {
       start: {
         x: vscaleBounds.bottomRight.x,
